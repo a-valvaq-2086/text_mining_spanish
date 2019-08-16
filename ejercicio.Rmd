@@ -1,0 +1,157 @@
+---
+title:  "Text Mining Ejercicio"
+author: "Alejandro Valladares Vaquero"
+date:   "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: paper
+    highlight: tango
+    number_sections: TRUE
+    toc:          TRUE
+    toc_float:    TRUE
+  pdf_document:   default
+  word_document:  default
+urlcolor: blue
+---
+
+Cargamos las librerías necesarias
+```{r message=FALSE}
+library(wordcloud)
+library(RColorBrewer)
+library(tidyverse)
+library(stringr)
+library(gridExtra)
+library(wordcloud)
+library(lubridate)
+library(tidytext)
+library(tm)
+library(reshape2)
+```
+
+# Introducción
+
+Este ejercicio se ha realizado utilizando el paquete tidytext, que es un paquete de Text Mining que sigue los principios de Tidy Data (H. Wickham).
+
+Descargamos los datos de Kaggle, puesto que aún no hay una Kaggle oficial para R, el archivo se puede descargar del siguiente enlace https://www.kaggle.com/aaron7sun/stocknews/downloads/stocknews.zip
+Y leemos en una estructura tipo tibble.
+
+## Carga de los datos
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+zipped_data <- paste0(getwd(), "/data/stocknews.zip")
+news <- read_csv(unz(zipped_data, "Combined_News_DJIA.csv"), col_types = cols(
+  Label = col_skip()
+))
+saveRDS(news, paste0(getwd(), "/data/news.rds"))
+```
+
+O también podemos guardar el archivocomo un archivo serializado Rds, para que no haga falta abrir el zip cada vez. Abajo vemos un ejemplo de la distribución de los datos. Vemos que tenemos una primera columna con la fecha del día y las siguientes 25 columnas son los 25 titulares más destacados en el Reddit **r/worldnews** en el periodo entre Agosto de 2008 y Julio de 2017.
+```{r}
+news <- readRDS("data/news.rds")
+head(news[,1:2],10)
+```
+
+## Vamos a limpiar los titulares:
+```{r}
+news_text <- as_tibble(lapply(news[, 2:26], function(y)gsub("^b'", "", y)))
+news_text <- as_tibble(lapply(news_text, function(y)gsub("^b\"", "", y)))
+news_text <- as_tibble(lapply(news_text, function(y)gsub("[[:punct:]]", "", y)))
+news_text <- as_tibble(lapply(news_text, function(y)tolower(y)))
+news_text <- as_tibble(lapply(news_text, function(y)gsub("[ \t]{2,}", "", y)))
+news_text <- as_tibble(lapply(news_text, function(y)gsub("^\\s+|\\s+$", "", y)))
+
+news_text <- as_tibble(cbind(news[, 1],news_text))
+head(news_text[,1:2],10)
+```
+
+Una vez tenemos algo más ordenado y limpio el texto, se abre un gran abanico de posibilidades de trabajo como veremos a continuación.
+
+# Análisis del texto
+
+Al tener las noticias separadas por orden de popularidad en r/worldnews, una posibilidad sería la de mantener este ranking e intentar analizar la temática o el sentimiento de las noticias más populares y ver como evolucionan con el tiempo.
+Por ejemplo sería muy útil ver si el factor que tienen sobre las noticias más populares grandes sucesos a nivel mundial (elecciones generales, crisis financieras, guerras, desastres naturales, grandes eventos deportivos, temáticas de primer orden mundial como el cambio climático, etc)
+
+
+## Análisis de sentimiento *estático*
+
+Para esta entrega me voy a centrar en un **análisis estático**, es decir, voy a prescindir de las variable temporal y de la popularidad en el análisis. El objetivo es un simple análisis de contenido y sentimiento a lo largo de todos los años de titulares. Así podremos ver que es lo que más ha preocupado al mundo durante estos años (o lo que más ha preocupado a los usuarios de **r/worldnews**).
+
+Lo primero que vamos a hacer, es unir todos los titulares en una sóla columna.
+```{r}
+news_text_day <- news_text %>% 
+  unite("headlines", c(Top1:Top25), sep=" ")
+head(news_text_day,10)
+```
+
+
+```{r}
+tidy_news <- news_text_day %>%
+  unnest_tokens(word, headlines)
+head(tidy_news,10)
+```
+
+Una vez que tenemos el el texto en formato *tidytext*, podemos quitar las stopwrods directamente haciendo un anti-join
+```{r message=FALSE}
+tidy_news <- tidy_news %>% 
+  anti_join(stop_words)
+
+tidy_news %>% 
+  count(word, sort = TRUE)
+```
+
+
+Vamos a visualizar las palabras más importantes
+```{r, echo=FALSE}
+tidy_news %>% 
+  count(word, sort = TRUE) %>% 
+  filter(n > 650) %>% 
+  mutate(word = reorder(word, n)) %>% 
+  ggplot(aes(word, n)) +
+  geom_col() + 
+  xlab("n") +
+  coord_flip() +
+  scale_x_discrete()
+```
+
+Ahora podemos hacer una nube de palabras:
+```{r message=FALSE, warning=FALSE}
+tidy_news %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 150))
+```
+
+## Análisis de sentimiento
+Vamos a utilizar el lexicón *bing* que hay en el paquete tidytext.
+
+```{r message=FALSE}
+bing_word_counts <- tidy_news %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  count(word, sentiment, sort = TRUE) %>% 
+  ungroup()
+head(bing_word_counts, 10)
+```
+
+```{r message=FALSE}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Análisis de sentimiento",
+       x = NULL) +
+  coord_flip()
+```
+
+
+```{r message=FALSE, warning=FALSE}
+tidy_news %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("red", "blue"),
+                   max.words = 100)
+```
+
