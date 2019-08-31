@@ -9,12 +9,13 @@ output:
     number_sections: TRUE
     toc:          TRUE
     toc_float:    TRUE
+    code_folding: "show"
   pdf_document:   default
   word_document:  default
 urlcolor: blue
 ---
 
-Cargamos las librerías necesarias
+# Librerías necesarias
 ```{r message=FALSE}
 library(wordcloud)
 library(RColorBrewer)
@@ -27,6 +28,7 @@ library(tidytext)
 library(tm)
 library(reshape2)
 ```
+***
 
 # Introducción
 
@@ -35,6 +37,7 @@ Este ejercicio se ha realizado utilizando el paquete tidytext, que es un paquete
 Descargamos los datos de Kaggle, puesto que aún no hay una Kaggle oficial para R, el archivo se puede descargar del siguiente enlace https://www.kaggle.com/aaron7sun/stocknews/downloads/stocknews.zip
 Y leemos en una estructura tipo tibble.
 
+***
 ## Carga de los datos
 ```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 zipped_data <- paste0(getwd(), "/data/stocknews.zip")
@@ -50,7 +53,8 @@ news <- readRDS("data/news.rds")
 head(news[,1:2],10)
 ```
 
-## Vamos a limpiar los titulares:
+***
+## Limpieza de los titulares
 ```{r}
 news_text <- as_tibble(lapply(news[, 2:26], function(y)gsub("^b'", "", y)))
 news_text <- as_tibble(lapply(news_text, function(y)gsub("^b\"", "", y)))
@@ -65,15 +69,18 @@ head(news_text[,1:2],10)
 
 Una vez tenemos algo más ordenado y limpio el texto, se abre un gran abanico de posibilidades de trabajo como veremos a continuación.
 
+***
 # Análisis del texto
 
 Al tener las noticias separadas por orden de popularidad en r/worldnews, una posibilidad sería la de mantener este ranking e intentar analizar la temática o el sentimiento de las noticias más populares y ver como evolucionan con el tiempo.
 Por ejemplo sería muy útil ver si el factor que tienen sobre las noticias más populares grandes sucesos a nivel mundial (elecciones generales, crisis financieras, guerras, desastres naturales, grandes eventos deportivos, temáticas de primer orden mundial como el cambio climático, etc)
 
-
+***
 ## Análisis de sentimiento *estático*
 
 Para esta entrega me voy a centrar en un **análisis estático**, es decir, voy a prescindir de las variable temporal y de la popularidad en el análisis. El objetivo es un simple análisis de contenido y sentimiento a lo largo de todos los años de titulares. Así podremos ver que es lo que más ha preocupado al mundo durante estos años (o lo que más ha preocupado a los usuarios de **r/worldnews**).
+
+### Ordenando el dataframe
 
 Lo primero que vamos a hacer, es unir todos los titulares en una sóla columna.
 ```{r}
@@ -89,7 +96,9 @@ tidy_news <- news_text_day %>%
 head(tidy_news,10)
 ```
 
-Una vez que tenemos el el texto en formato *tidytext*, podemos quitar las stopwrods directamente haciendo un anti-join
+### Limpieza de stop-words
+
+Una vez que tenemos el el texto en formato *tidytext*, podemos quitar las stopwrods directamente haciendo un anti-join.
 ```{r message=FALSE}
 tidy_news <- tidy_news %>% 
   anti_join(stop_words)
@@ -99,8 +108,10 @@ tidy_news %>%
 ```
 
 
-Vamos a visualizar las palabras más importantes
-```{r, echo=FALSE}
+### Palabras más importantes
+
+Una vez eliminadas las stop-words, vamos a pintar el histograma con las palabras más aparecidas a lo largo de los años.
+```{r echo=TRUE}
 tidy_news %>% 
   count(word, sort = TRUE) %>% 
   filter(n > 650) %>% 
@@ -112,7 +123,7 @@ tidy_news %>%
   scale_x_discrete()
 ```
 
-Ahora podemos hacer una nube de palabras:
+### Nube de palabras
 ```{r message=FALSE, warning=FALSE}
 tidy_news %>%
   anti_join(stop_words) %>%
@@ -120,8 +131,9 @@ tidy_news %>%
   with(wordcloud(word, n, max.words = 150))
 ```
 
-## Análisis de sentimiento
-Vamos a utilizar el lexicón *bing* que hay en el paquete tidytext.
+***
+# Análisis de sentimiento
+Vamos a utilizar el lexicón ***bing*** que hay en el paquete *tidytext*.
 
 ```{r message=FALSE}
 bing_word_counts <- tidy_news %>% 
@@ -130,6 +142,8 @@ bing_word_counts <- tidy_news %>%
   ungroup()
 head(bing_word_counts, 10)
 ```
+
+## Histograma con las palabras más utilizadas por sentimiento
 
 ```{r message=FALSE}
 bing_word_counts %>%
@@ -144,8 +158,11 @@ bing_word_counts %>%
        x = NULL) +
   coord_flip()
 ```
+<br><br>
 
+Vemos claramente como los titulares tienden a ser más negativos que positivos.
 
+## Nube de palabras con *sentimiento*
 ```{r message=FALSE, warning=FALSE}
 tidy_news %>%
   inner_join(get_sentiments("bing")) %>%
@@ -154,4 +171,3 @@ tidy_news %>%
   comparison.cloud(colors = c("red", "blue"),
                    max.words = 100)
 ```
-
