@@ -1,5 +1,5 @@
 # text_mining_spanish
-Text Mining coursework (in spanish)
+Text Mining and sentiment with R using tidytext package - coursework (in spanish)
 
 Coursework for the Master's Degree in Big Data and Business Analytics U.N.E.D.
 Since the syllabus is in Spanish all the code and comments are left in Spanish.
